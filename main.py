@@ -1,10 +1,10 @@
 import os
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from database import SessionLocal, Grant, Milestone, init_db
+import database
 
 # Initialize database tables on startup
-init_db()
+database.init_db()
 
 app = FastAPI(
     title="Clean Distributed Ledger Suite (CDLS) API",
@@ -27,16 +27,16 @@ app.add_middleware(
 )
 
 def get_db():
-    db = SessionLocal()
+    db = database.SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
 @app.get("/api/dashboard/metrics")
-def get_dashboard_metrics(db: Session = Depends(get_db)):
-    total_grants = db.query(Grant).count()
-    active_grants = db.query(Grant).filter(Grant.status == "Active").count()
+def get_dashboard_metrics(db=Depends(get_db)):
+    total_grants = db.query(database.Grant).count()
+    active_grants = db.query(database.Grant).filter(database.Grant.status == "Active").count()
     return {
         "status": "SECURE",
         "compliance_score": 100,
