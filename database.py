@@ -2,31 +2,26 @@ import os
 from sqlalchemy import create_engine, Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-# Secure database connection string from environment variables or local PostgreSQL defaults
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/cdls_production")
 
-# Initialize SQLAlchemy engine and session factory
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 class Grant(Base):
-    """Represents institutional grants and funding allocations."""
     __tablename__ = "grants"
     
     id = Column(Integer, primary_key=True, index=True)
     grant_name = Column(String, nullable=False)
-    agency_source = Column(String, nullable=False)  # e.g., GO-Biz, CEC
+    agency_source = Column(String, nullable=False)
     total_amount = Column(Numeric(12, 2), nullable=False)
     disbursed_amount = Column(Numeric(12, 2), default=0.00)
-    status = Column(String, default="Active")  # Active, Completed, Pending
+    status = Column(String, default="Active")
     created_at = Column(DateTime, server_default=func.now())
 
-    # Relationship to tracking milestones
     milestones = relationship("Milestone", back_populates="grant", cascade="all, delete-orphan")
 
 class Milestone(Base):
-    """Represents specific project milestones and milestone-linked funding."""
     __tablename__ = "milestones"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -38,9 +33,4 @@ class Milestone(Base):
     grant = relationship("Grant", back_populates="milestones")
 
 def init_db():
-    """Creates database tables securely under current schema definitions."""
     Base.metadata.create_all(bind=engine)
-    print("[SUCCESS] Database tables verified and created successfully.")
-
-if __name__ == "__main__":
-    init_db()

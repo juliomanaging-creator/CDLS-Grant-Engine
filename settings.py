@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import List
+# Editor configuration: python.analysis.extraPaths = ["."]
 
 # Base directory definition
 BASE_DIR = Path(__file__).resolve().parent

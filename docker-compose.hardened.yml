@@ -1,52 +1,30 @@
+version: '3.8'
+
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: cdls_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-cdls_secure_admin}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME:-cdls_production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
   api:
-    image: cdls-api:latest
     build:
       context: .
-      dockerfile: Dockerfile.api
-    container_name: cdls-api-server
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
-    deploy:
-      resources:
-        limits:
-          cpus: '1.5'
-          memory: 2G
-    networks:
-      - cdls-internal
+      dockerfile: Dockerfile
+    container_name: cdls_api_gateway
     ports:
       - "127.0.0.1:8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-cdls_secure_admin}:${DB_PASS}@postgres:5432/${DB_NAME:-cdls_production}
+      - CDLS_ALLOWED_ORIGINS=https://juliomanaging-creator.github.io
+    depends_on:
+      - postgres
+    restart: always
 
-  vdr:
-    image: cdls-vdr:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.vdr
-    container_name: cdls-vdr-server
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-    networks:
-      - cdls-internal
-    ports:
-      - "127.0.0.1:8001:8001"
-
-networks:
-  cdls-internal:
-    driver: bridge
+volumes:
+  postgres_data:
