@@ -1,8 +1,7 @@
 ﻿import os
+import json
+import hashlib
 from datetime import datetime, timezone
-
-# Use timezone-aware UTC instead of deprecated utcnow()
-timestamp = datetime.now(timezone.utc).isoformat() 
 
 def run_security_sentinel():
     print("=============================================")
@@ -30,7 +29,7 @@ def run_security_sentinel():
         scan_logs.append(f"[WARN] Scan exception encountered: {str(e)}")
 
     report_path = "SECURITY_AUDIT_REPORT.md"
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
     
     report_content = f"""# CDLS Security Audit Report
 - **Timestamp**: {timestamp}
