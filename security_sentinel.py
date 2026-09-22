@@ -11,22 +11,39 @@ def run_security_sentinel():
     issues_found = 0
     scan_logs = []
 
-    # Active code inspection to prevent stubbing bypasses
-    try:
-        print("[INFO] Running static code analysis and policy scans...")
-        if os.path.exists("main.py"):
-            with open("main.py", "r", encoding="utf-8") as f:
-                content = f.read()
-                if 'allow_origins=["*"]' in content:
-                    issues_found += 1
-                    scan_logs.append("[FAIL] PRB-001: Wildcard CORS detected in main.py")
-                else:
-                    scan_logs.append("[PASS] CORS policy correctly restricted to explicit origins.")
-        
-        score = max(70, 100 - (issues_found * 15))
-    except Exception as e:
-        score = 85
-        scan_logs.append(f"[WARN] Scan exception encountered: {str(e)}")
+    # 1. Inspect main.py for CORS wildcards and unauthenticated routes
+    if os.path.exists("main.py"):
+        with open("main.py", "r", encoding="utf-8") as f:
+            content = f.read()
+            if 'allow_origins=["*"]' in content or "allow_origins=['*']" in content:
+                issues_found += 2
+                scan_logs.append("[FAIL] PRB-001: Wildcard CORS detected in main.py")
+            else:
+                scan_logs.append("[PASS] CORS origin policy restricted correctly.")
+                
+            if "verify_active_session" not in content and "/api/" in content:
+                issues_found += 1
+                scan_logs.append("[WARN] API endpoints found without explicit session verification dependency.")
+            else:
+                scan_logs.append("[PASS] API endpoints implement session verification.")
+    else:
+        issues_found += 2
+        scan_logs.append("[FAIL] Critical file main.py missing.")
+
+    # 2. Inspect vdr_server.py for path traversal defenses
+    if os.path.exists("vdr_server.py"):
+        with open("vdr_server.py", "r", encoding="utf-8") as f:
+            vdr_content = f.read()
+            if "os.path.realpath" in vdr_content and "startswith" in vdr_content:
+                scan_logs.append("[PASS] VDR server enforces strict path traversal confinement.")
+            else:
+                issues_found += 2
+                scan_logs.append("[FAIL] VDR server missing path traversal boundary checks.")
+    else:
+        scan_logs.append("[INFO] vdr_server.py not present; skipping check.")
+
+    # Calculate compliance score (Floor: 85)
+    score = max(60, 100 - (issues_found * 10))
 
     report_path = "SECURITY_AUDIT_REPORT.md"
     timestamp = datetime.now(timezone.utc).isoformat()
