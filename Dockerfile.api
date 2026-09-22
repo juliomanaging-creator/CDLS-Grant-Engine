@@ -1,27 +1,38 @@
-﻿FROM python:3.11-slim
-
-# Prevent interactive prompts during build
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Update base system packages to pull latest upstream security patches
-RUN apt-get update && apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/*
-
+﻿# Stage 1: Build dependencies in a secure isolated builder container
+FROM python:3.11-slim AS builder
 WORKDIR /app
 
-# Copy requirements and explicitly ensure patched high-severity pins
+# Install system build essentials
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install python dependencies into local user directory
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir "jaraco.context>=6.1.0" "wheel>=0.46.2" && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Copy application source code
-COPY . .
+# Stage 2: Minimal runtime image for production deployment
+FROM python:3.11-slim AS runtime
+WORKDIR /app
 
-# Enforce secure non-root runtime
-RUN useradd -u 10001 cdlsuser && chown -R cdlsuser:cdlsuser /app
-USER cdlsuser
+# Install runtime postgres client libraries only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
+# Copy installed python packages from builder stage
+COPY --from=builder /root/.local /root/.local
+
+# Copy only necessary runtime python modules (excluding confidential docs/vdr vaults)
+COPY main.py database.py cdls_orchestrator.py security_sentinel.py ./
+
+# Set environment path for installed packages
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONUNBUFFERED=1
+
+# Bind strictly to loopback interface for local container security
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"]
+
+# Execute server with production workers
+CMD ["uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000", "--workers", "4"]
