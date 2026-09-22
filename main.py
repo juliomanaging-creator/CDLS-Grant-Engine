@@ -27,7 +27,10 @@ app.add_middleware(
 )
 
 def get_db():
-    db = database.SessionLocal()
+    session_factory = getattr(database, "SessionLocal", None)
+    if session_factory is None:
+        raise RuntimeError("database.SessionLocal is not configured")
+    db = session_factory()
     try:
         yield db
     finally:
@@ -35,8 +38,8 @@ def get_db():
 
 @app.get("/api/dashboard/metrics")
 def get_dashboard_metrics(db=Depends(get_db)):
-    total_grants = db.query(database.Grant).count()
-    active_grants = db.query(database.Grant).filter(database.Grant.status == "Active").count()
+    total_grants = db.query(Grant).count()
+    active_grants = db.query(Grant).filter(Grant.status == "Active").count()
     return {
         "status": "SECURE",
         "compliance_score": 100,
