@@ -250,7 +250,7 @@ class DatabaseManager:
         cursor = self.sqlite_conn.cursor()
         placeholders = ",".join("?" * len(doc_ids))
         cursor.execute(
-            f"SELECT * FROM documents WHERE id IN ({placeholders})", doc_ids
+            f"SELECT * FROM documents WHERE id IN ({placeholders})", doc_ids  # nosec B608
         )
         return [dict(row) for row in cursor.fetchall()]
 

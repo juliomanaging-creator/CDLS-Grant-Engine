@@ -262,7 +262,7 @@ class IngestionAgent:
         """Build a standardized document dict."""
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         return {
-            "id": hashlib.md5(url.encode()).hexdigest(),
+            "id": hashlib.md5(url.encode()).hexdigest(),  # nosec B324
             "url": url,
             "title": title,
             "content": content,

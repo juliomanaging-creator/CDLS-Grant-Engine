@@ -12,10 +12,14 @@ def run_security_sentinel():
     issues_found = 0
     scan_logs = []
 
-    # 1. Run Bandit SAST scan if available
+    # 1. Run Bandit SAST scan excluding virtual environment
     try:
         print("[*] Executing Bandit SAST vulnerability scan...")
-        bandit_res = subprocess.run(["bandit", "-r", ".", "-f", "json", "-o", "bandit_report.json"], capture_output=True, text=True)
+        bandit_res = subprocess.run(
+            ["bandit", "-r", ".", "--exclude", "./.venv", "-f", "json", "-o", "bandit_report.json"], 
+            capture_output=True, 
+            text=True
+        )
         if os.path.exists("bandit_report.json"):
             with open("bandit_report.json", "r") as bf:
                 b_data = json.load(bf)

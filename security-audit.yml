@@ -2,54 +2,95 @@ name: CDLS Automated Security Sentinel & Pipeline Gate
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ main ]
+
+permissions:
+  contents: read   # Least-privilege (Aikido L-1 fix: persist-credentials: false)
 
 jobs:
   security-audit:
     name: Full-Stack AppSec Audit (SAST, SCA, Secrets, IaC)
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      security-events: write
-
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # Aikido L-1 fix
 
       - name: Set up Python Environment
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
+      # -----------------------------------------------------------------------
+      # Install all security analysis tools + project dependencies
+      # Bandit is now explicitly installed here (fixes WinError 2 / Run #12)
+      # -----------------------------------------------------------------------
       - name: Install Security Analysis Tools & Dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install bandit safety semgrep pytest
 
+          # Security scanning tools — explicit versions for reproducibility
+          pip install \
+            bandit==1.8.3 \
+            pip-audit==2.7.3 \
+            detect-secrets==1.5.0 \
+            pip-licenses==5.0.0
+
+          # Project dependencies
+          pip install -r requirements.txt
+
+          echo "[OK] All security tools and dependencies installed"
+          bandit --version
+          pip-audit --version
+
+      # -----------------------------------------------------------------------
+      # Run the unified security sentinel (SAST + SCA + Secrets + Licenses + IaC)
+      # Requires 100/100 — exits 1 if below 85/100 floor
+      # -----------------------------------------------------------------------
       - name: Run Unified Security Sentinel
-        run: |
-          python security_sentinel.py
+        run: python security_sentinel.py
 
+      # -----------------------------------------------------------------------
+      # Verify Dockerfile hardening controls are present
+      # -----------------------------------------------------------------------
       - name: Verify Container Dockerfile Hardening
         run: |
-          echo "[INFO] Inspecting Dockerfile configurations for non-root enforcement and base image pins..."
-          if grep -q "USER 10001" Dockerfile Dockerfile.api Dockerfile.vdr 2>/dev/null; then
-            echo "[OK] Non-root user runtime enforced across container manifests."
-          else
-            echo "[WARNING] Non-root user check skipped or multi-file check partially resolved."
-          fi
-          echo "[SUCCESS] Container build hygiene verification complete."
+          echo "Checking Dockerfile security controls..."
 
+          for df in Dockerfile Dockerfile.api Dockerfile.vdr; do
+            if [ -f "$df" ]; then
+              # Non-root user
+              grep -q "useradd\|USER " "$df" && echo "[OK] $df: Non-root user" || \
+                (echo "[FAIL] $df: Missing non-root user enforcement" && exit 1)
+
+              # No hardcoded 0.0.0.0 in CMD
+              if grep -q '"0\.0\.0\.0"' "$df"; then
+                echo "[FAIL] $df: Contains 0.0.0.0 binding (Bandit B104)" && exit 1
+              else
+                echo "[OK] $df: No 0.0.0.0 binding"
+              fi
+
+              # apt-get upgrade present
+              grep -q "apt-get upgrade" "$df" && echo "[OK] $df: OS upgrades present" || \
+                echo "[WARN] $df: apt-get upgrade not found (OS CVE mitigation)"
+            fi
+          done
+
+          echo "[OK] Dockerfile hardening checks passed"
+
+      # -----------------------------------------------------------------------
+      # Archive audit artifacts for assessor evidence package
+      # -----------------------------------------------------------------------
       - name: Archive Security Audit Artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: CDLS_Security_Audit_Evidence
+          name: security-audit-report-${{ github.run_number }}
           path: |
             SECURITY_AUDIT_REPORT.md
-            CDLS_Security_Audit_Evidence/
-        if: always()
+          retention-days: 90

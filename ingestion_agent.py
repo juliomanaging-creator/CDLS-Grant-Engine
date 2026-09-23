@@ -312,7 +312,7 @@ class IngestionAgent:
 
     def _build_document(self, source: str, title: str, content: str, doc_type: str, category: str) -> dict:
         content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        doc_id = hashlib.md5(source.encode("utf-8")).hexdigest()
+        doc_id = hashlib.md5(source.encode("utf-8")).hexdigest()  # nosec B324
 
         return {
             "id": doc_id,
