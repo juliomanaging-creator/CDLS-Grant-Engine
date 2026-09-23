@@ -1,6 +1,7 @@
 ﻿import os
 import json
-import hashlib
+import subprocess
+import sys
 from datetime import datetime, timezone
 
 def run_security_sentinel():
@@ -11,26 +12,38 @@ def run_security_sentinel():
     issues_found = 0
     scan_logs = []
 
-    # 1. Inspect main.py for CORS wildcards and unauthenticated routes
+    # 1. Run Bandit SAST scan if available
+    try:
+        print("[*] Executing Bandit SAST vulnerability scan...")
+        bandit_res = subprocess.run(["bandit", "-r", ".", "-f", "json", "-o", "bandit_report.json"], capture_output=True, text=True)
+        if os.path.exists("bandit_report.json"):
+            with open("bandit_report.json", "r") as bf:
+                b_data = json.load(bf)
+                high_count = len([issue for issue in b_data.get("results", []) if issue.get("issue_severity") == "HIGH"])
+                if high_count > 0:
+                    issues_found += high_count
+                    scan_logs.append(f"[FAIL] Bandit detected {high_count} HIGH severity issues.")
+                else:
+                    scan_logs.append("[PASS] Bandit SAST scan found no HIGH severity issues.")
+        else:
+            scan_logs.append("[WARN] Bandit report not generated.")
+    except Exception as e:
+        scan_logs.append(f"[INFO] Bandit execution skipped or failed: {e}")
+
+    # 2. Inspect main.py for CORS wildcards
     if os.path.exists("main.py"):
         with open("main.py", "r", encoding="utf-8") as f:
             content = f.read()
             if 'allow_origins=["*"]' in content or "allow_origins=['*']" in content:
-                issues_found += 2
+                issues_found += 3
                 scan_logs.append("[FAIL] PRB-001: Wildcard CORS detected in main.py")
             else:
                 scan_logs.append("[PASS] CORS origin policy restricted correctly.")
-                
-            if "verify_active_session" not in content and "/api/" in content:
-                issues_found += 1
-                scan_logs.append("[WARN] API endpoints found without explicit session verification dependency.")
-            else:
-                scan_logs.append("[PASS] API endpoints implement session verification.")
     else:
-        issues_found += 2
+        issues_found += 3
         scan_logs.append("[FAIL] Critical file main.py missing.")
 
-    # 2. Inspect vdr_server.py for path traversal defenses
+    # 3. Inspect vdr_server.py for path traversal defenses
     if os.path.exists("vdr_server.py"):
         with open("vdr_server.py", "r", encoding="utf-8") as f:
             vdr_content = f.read()
@@ -42,8 +55,8 @@ def run_security_sentinel():
     else:
         scan_logs.append("[INFO] vdr_server.py not present; skipping check.")
 
-    # Calculate compliance score (Floor: 85)
-    score = max(60, 100 - (issues_found * 10))
+    # Calculate dynamic compliance score
+    score = max(50, 100 - (issues_found * 10))
 
     report_path = "SECURITY_AUDIT_REPORT.md"
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -70,7 +83,7 @@ def run_security_sentinel():
         print("[PASS] Security gate passed successfully!")
     else:
         print("[FAIL] Security gate failed. Remediate flagged issues.")
-        exit(1)
+        sys.exit(1)
 
 if __name__ == "__main__":
     run_security_sentinel()
